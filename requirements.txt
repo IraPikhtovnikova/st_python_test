@@ -1,1 +1,1 @@
-playwright==1.60.0
+selenium==4.44.0
