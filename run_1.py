@@ -2,7 +2,7 @@ import json
 from src.parser import find_sku_position
 
 queries = ["корм для кошек сухой"]
-sku = ["489093945"]
+sku = ["228861138"]
 
 def main():
     for i in range(len(queries)):

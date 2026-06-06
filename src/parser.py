@@ -1,5 +1,9 @@
 from datetime import datetime
-from playwright.sync_api import sync_playwright
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
 from urllib.parse import quote
 from .models import Result
 
@@ -17,75 +21,64 @@ def extract_sku(link: str) -> str | None:
     else:
         return None
     
+    
 def create_url(query: str) -> str:
     return f'https://www.ozon.ru/search/?text={quote(query)}'
 
-def find_sku_position(query: str, sku: str, max_results: int = 100) -> Result:
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(
-            headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--disable-infobars",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--window-position=9999,9999"
-            ]
-        )
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            locale="ru/RU"
-        )
-        page = context.new_page()
-
-        page.goto(create_url(query), wait_until="networkidle", timeout=30000)
-
-        found = []
-        unique = set()
-        while len(found) < max_results:
-            links = page.locator("a[href*='/product/']").all()
-
-            for link in links:
-                href = link.get_attribute("href")
-                product_sku = extract_sku(href)
-                if not product_sku or product_sku in unique:
-                    continue
+def find_sku_position(query: str, sku: str, max_results: int = 100):
+    options = webdriver.ChromeOptions()
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    # options.add_argument('--headless=new')
+    options.add_argument('--window-size=1920,1080')
+    driver = webdriver.Chrome(options=options)
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    driver.get(create_url(query))
+    time.sleep(5)
+    
+    found = []
+    unique = set()
+    last_count = 0
+    
+    while len(found) < max_results:
+        links = driver.find_elements(By.CSS_SELECTOR, 'a[href*="/product/"]')
+        
+        for link in links:
+            if len(found) >= max_results:
+                break
+            href = link.get_attribute("href")
+            product_sku = extract_sku(href)
+            if product_sku and product_sku not in unique:
                 found.append(product_sku)
                 unique.add(product_sku)
-
-                if len(found) >= max_results:
-                    break
-
-            if sku in found:
-                position = found.index(sku) + 1
-                browser.close()
-
-                return Result(
-                    query=query,
-                    sku=sku,
-                    position=position,
-                    page=1,
-                    total_checked=len(found),
-                    timestamp=datetime.now()
+                
+                if product_sku == sku:
+                    driver.quit()
+                    return Result(
+                        query=query,
+                        sku=sku,
+                        position=len(found),
+                        page=1,
+                        total_checked=len(found),
+                        timestamp=datetime.now()
                 )
-            
-            count_before = page.locator("a[href*='/product/']").count()
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            try:
-                page.wait_for_function(
-                    f"""
-                    () => document.querySelectorAll(
-                        "a[href*='/product/']"
-                    ).length > {count_before}
-                    """,
-                    timeout=3000
-                )
-            except Exception:
-                break
-        browser.close()
-
-        return Result(
+        
+        # Скроллим до последнего элемента
+        if links:
+            driver.execute_script("arguments[0].scrollIntoView(true);", links[-1])
+        
+        time.sleep(2)
+        
+        # Если количество не увеличилось - выходим
+        if len(found) == last_count:
+            break
+        last_count = len(found)
+    
+    driver.quit()
+    return Result(
             query=query,
             sku=sku,
             position="not_found",
@@ -93,5 +86,3 @@ def find_sku_position(query: str, sku: str, max_results: int = 100) -> Result:
             total_checked=len(found),
             timestamp=datetime.now()
         )
-
-
