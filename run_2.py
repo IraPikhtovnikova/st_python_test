@@ -3,7 +3,7 @@ from src.parser import find_sku_position
 import time
 
 queries = ["корм для кошек сухой", "серый зонт", "масло гхи"]
-sku = ["489093945", "1683355051", "276684382"]
+sku = ["228861138", "1683355051", "276684382"]
 
 def main():
     for i in range(len(queries)):
@@ -14,7 +14,7 @@ def main():
                 ensure_ascii=False
             )
         )
-        time.sleep(3)
+        time.sleep(30)
 
 if __name__ == "__main__":
     main()
